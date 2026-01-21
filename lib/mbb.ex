@@ -1,9 +1,11 @@
 defmodule Mbb do
   def send(message) do
+    api_key = System.get_env("API_KEY") || ""
+
     req =
       Req.new(base_url: "https://api.anthropic.com/v1/messages")
       |> Req.Request.put_header("Content-Type", "application/json")
-      |> Req.Request.put_header("x-api-key", System.get_env("API_KEY"))
+      |> Req.Request.put_header("x-api-key", api_key)
       |> Req.Request.put_header("anthropic-version", "2023-06-01")
       |> Req.post(
         json: %{
@@ -19,9 +21,12 @@ defmodule Mbb do
       )
 
     case req do
-      {:ok, response} ->
-        text = response.body["content"] |> List.first() |> Map.get("text")
+      {:ok, %{status: 200, body: body}} ->
+        text = body["content"] |> List.first() |> Map.get("text")
         {:ok, text}
+
+      {:ok, %{status: status, body: body}} ->
+        {:error, body["error"]["message"] || "API error: #{status}"}
 
       {:error, error} ->
         {:error, error}
