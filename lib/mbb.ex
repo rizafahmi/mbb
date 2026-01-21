@@ -133,7 +133,10 @@ defmodule Mbb do
     end
   end
 
-  defp handle_sse_event(%{"type" => "message_delta", "delta" => %{"stop_reason" => reason}}, state) do
+  defp handle_sse_event(
+         %{"type" => "message_delta", "delta" => %{"stop_reason" => reason}},
+         state
+       ) do
     %{state | stop_reason: reason}
   end
 
@@ -155,6 +158,8 @@ defmodule Mbb do
   end
 
   defp execute_tool("read_file", %{"path" => path}) do
+    IO.puts("\n\n📖 Reading #{path}.\n\n")
+
     cond do
       not File.exists?(path) -> "Error: File not found: #{path}"
       File.dir?(path) -> "Error: Path is a directory: #{path}"
