@@ -28,47 +28,127 @@ defmodule Mbb do
   defp send(messages) when is_list(messages) do
     api_key = System.get_env("API_KEY") || ""
 
-    @api_url
-    |> Req.post(
-      headers: [
-        {"x-api-key", api_key},
-        {"anthropic-version", "2023-06-01"}
-      ],
-      json: %{
-        model: @model,
-        max_tokens: 10_000,
-        tools: @tools,
-        temperature: 1,
-        system: @system_prompt,
-        messages: messages
-      }
-    )
-    |> handle_response()
+    state = %{
+      content: [],
+      current_block: nil,
+      current_text: "",
+      current_tool_input: "",
+      stop_reason: nil
+    }
+
+    result =
+      Req.post!(@api_url,
+        headers: [
+          {"x-api-key", api_key},
+          {"anthropic-version", "2023-06-01"}
+        ],
+        json: %{
+          model: @model,
+          max_tokens: 10_000,
+          tools: @tools,
+          temperature: 1,
+          system: @system_prompt,
+          messages: messages,
+          stream: true
+        },
+        into: fn {:data, chunk}, {req, resp} ->
+          new_state = process_sse_chunk(chunk, Process.get(:stream_state, state))
+          Process.put(:stream_state, new_state)
+          {:cont, {req, resp}}
+        end
+      )
+
+    final_state = Process.get(:stream_state, state)
+    Process.delete(:stream_state)
+
+    case result do
+      %{status: 200} -> handle_stream_result(final_state)
+      %{status: status, body: body} -> {:error, "API error: #{status} - #{inspect(body)}"}
+    end
   end
 
   defp send(message) do
     send([%{role: "user", content: message}])
   end
 
-  defp handle_response({:ok, %{status: 200, body: body}}) do
-    case body["stop_reason"] do
-      "tool_use" ->
-        tool_use = Enum.find(body["content"], &(&1["type"] == "tool_use"))
-        tool_result = execute_tool(tool_use["name"], tool_use["input"])
-        {:tool_use, body["content"], tool_use["id"], tool_result}
+  defp process_sse_chunk(chunk, state) do
+    chunk
+    |> String.split("\n")
+    |> Enum.reduce(state, fn line, acc ->
+      case line do
+        "data: " <> json_str ->
+          case Jason.decode(json_str) do
+            {:ok, event} -> handle_sse_event(event, acc)
+            _ -> acc
+          end
 
-      _ ->
-        text = get_in(body, ["content", Access.at(0), "text"])
-        {:ok, text}
+        _ ->
+          acc
+      end
+    end)
+  end
+
+  defp handle_sse_event(%{"type" => "content_block_start", "content_block" => block}, state) do
+    case block do
+      %{"type" => "text"} ->
+        %{state | current_block: :text, current_text: ""}
+
+      %{"type" => "tool_use", "id" => id, "name" => name} ->
+        %{state | current_block: {:tool_use, id, name}, current_tool_input: ""}
     end
   end
 
-  defp handle_response({:ok, %{status: status, body: body}}) do
-    error = get_in(body, ["error", "message"]) || "API error: #{status}"
-    {:error, error}
+  defp handle_sse_event(%{"type" => "content_block_delta", "delta" => delta}, state) do
+    case delta do
+      %{"type" => "text_delta", "text" => text} ->
+        IO.write(text)
+        %{state | current_text: state.current_text <> text}
+
+      %{"type" => "input_json_delta", "partial_json" => json} ->
+        %{state | current_tool_input: state.current_tool_input <> json}
+
+      _ ->
+        state
+    end
   end
 
-  defp handle_response({:error, error}), do: {:error, error}
+  defp handle_sse_event(%{"type" => "content_block_stop"}, state) do
+    case state.current_block do
+      :text ->
+        block = %{"type" => "text", "text" => state.current_text}
+        %{state | content: state.content ++ [block], current_block: nil}
+
+      {:tool_use, id, name} ->
+        input =
+          case state.current_tool_input do
+            "" -> %{}
+            json -> Jason.decode!(json)
+          end
+
+        block = %{"type" => "tool_use", "id" => id, "name" => name, "input" => input}
+        %{state | content: state.content ++ [block], current_block: nil}
+
+      _ ->
+        state
+    end
+  end
+
+  defp handle_sse_event(%{"type" => "message_delta", "delta" => %{"stop_reason" => reason}}, state) do
+    %{state | stop_reason: reason}
+  end
+
+  defp handle_sse_event(_event, state), do: state
+
+  defp handle_stream_result(%{stop_reason: "tool_use", content: content}) do
+    tool_use = Enum.find(content, &(&1["type"] == "tool_use"))
+    tool_result = execute_tool(tool_use["name"], tool_use["input"])
+    {:tool_use, content, tool_use["id"], tool_result}
+  end
+
+  defp handle_stream_result(%{stop_reason: _}) do
+    IO.puts("")
+    {:ok, :streamed}
+  end
 
   defp execute_tool("get_current_time", _input) do
     NaiveDateTime.local_now() |> NaiveDateTime.to_string()
@@ -91,6 +171,10 @@ defmodule Mbb do
   def main([], system_mod, _sender) do
     IO.puts("Usage: ./mbb <your question>")
     system_mod.halt(1)
+  end
+
+  defp process_response({:ok, :streamed}, _messages, system_mod, _sender) do
+    system_mod.halt(0)
   end
 
   defp process_response({:ok, response}, _messages, system_mod, _sender) do
