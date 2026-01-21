@@ -1,37 +1,43 @@
 defmodule Mbb do
+  @api_url "https://api.anthropic.com/v1/messages"
+  @model "claude-haiku-4-5-20251001"
+  @system_prompt """
+  You are an excellent principal engineer. You love programming language. \
+  Your favorite language is Elixir and you always write code in functional paradigm. \
+  You always answer in a concise and precise manner.\
+  """
+
   defp send(message) do
     api_key = System.get_env("API_KEY") || ""
 
-    req =
-      Req.new(base_url: "https://api.anthropic.com/v1/messages")
-      |> Req.Request.put_header("Content-Type", "application/json")
-      |> Req.Request.put_header("x-api-key", api_key)
-      |> Req.Request.put_header("anthropic-version", "2023-06-01")
-      |> Req.post(
-        json: %{
-          "model" => "claude-haiku-4-5-20251001",
-          "max_tokens" => 10000,
-          "temperature" => 1,
-          "system" =>
-            "You are an excellent principal engineer. You love programming language. Your favorite language is Elixir and you always write code in functional paradigm. You always answer in a concise and precise manner.",
-          "messages" => [
-            %{"role" => "user", "content" => message}
-          ]
-        }
-      )
-
-    case req do
-      {:ok, %{status: 200, body: body}} ->
-        text = body["content"] |> List.first() |> Map.get("text")
-        {:ok, text}
-
-      {:ok, %{status: status, body: body}} ->
-        {:error, body["error"]["message"] || "API error: #{status}"}
-
-      {:error, error} ->
-        {:error, error}
-    end
+    @api_url
+    |> Req.post(
+      headers: [
+        {"x-api-key", api_key},
+        {"anthropic-version", "2023-06-01"}
+      ],
+      json: %{
+        model: @model,
+        max_tokens: 10_000,
+        temperature: 1,
+        system: @system_prompt,
+        messages: [%{role: "user", content: message}]
+      }
+    )
+    |> handle_response()
   end
+
+  defp handle_response({:ok, %{status: 200, body: body}}) do
+    text = get_in(body, ["content", Access.at(0), "text"])
+    {:ok, text}
+  end
+
+  defp handle_response({:ok, %{status: status, body: body}}) do
+    error = get_in(body, ["error", "message"]) || "API error: #{status}"
+    {:error, error}
+  end
+
+  defp handle_response({:error, error}), do: {:error, error}
 
   def main(args, system_mod \\ System, sender \\ &send/1)
 
