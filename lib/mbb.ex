@@ -1,5 +1,5 @@
 defmodule Mbb do
-  def send(message) do
+  defp send(message) do
     api_key = System.get_env("API_KEY") || ""
 
     req =
@@ -33,10 +33,10 @@ defmodule Mbb do
     end
   end
 
-  def main(args, system_mod \\ System)
+  def main(args, system_mod \\ System, sender \\ &send/1)
 
-  def main([args], system_mod) do
-    case send(args) do
+  def main([args], system_mod, sender) do
+    case sender.(args) do
       {:ok, response} ->
         IO.puts(response)
         system_mod.halt(0)
@@ -47,7 +47,7 @@ defmodule Mbb do
     end
   end
 
-  def main([], system_mod) do
+  def main([], system_mod, _sender) do
     IO.puts("Usage: ./mbb <your question>")
     system_mod.halt(1)
   end
