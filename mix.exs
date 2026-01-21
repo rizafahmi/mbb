@@ -8,9 +8,14 @@ defmodule Mbb.MixProject do
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       escript: [main_module: Mbb],
+      elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps()
     ]
   end
+
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+
+  defp elixirc_paths(_), do: ["lib"]
 
   # Run "mix help compile.app" to learn about applications.
   def application do
@@ -24,7 +29,8 @@ defmodule Mbb.MixProject do
     [
       # {:dep_from_hexpm, "~> 0.3.0"},
       # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
-      {:mix_test_interactive, "~> 5.1", only: :dev, runtime: false}
+      {:mix_test_interactive, "~> 5.1", only: :dev, runtime: false},
+      {:req, "~> 0.5.17"}
     ]
   end
 end
