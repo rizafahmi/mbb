@@ -28,4 +28,43 @@ defmodule MbbTest do
 
     assert String.contains?(result, "9:46 PM")
   end
+
+  describe "read_file tool" do
+    test "reads file content successfully" do
+      path = Path.join(System.tmp_dir!(), "test_read_#{:rand.uniform(10000)}.txt")
+      File.write!(path, "hello world")
+
+      result =
+        capture_io(fn ->
+          Mbb.main(["Read the file"], SystemMock, SenderMock.read_file_flow(path))
+        end)
+
+      assert String.contains?(result, "Here is the file content")
+      File.rm!(path)
+    end
+
+    test "returns error when file not found" do
+      path = "/nonexistent/path/file.txt"
+      sender = SenderMock.read_file_flow(path)
+
+      result =
+        capture_io(fn ->
+          Mbb.main(["Read the file"], SystemMock, sender)
+        end)
+
+      assert String.contains?(result, "Here is the file content")
+    end
+
+    test "returns error when path is a directory" do
+      path = System.tmp_dir!()
+      sender = SenderMock.read_file_flow(path)
+
+      result =
+        capture_io(fn ->
+          Mbb.main(["Read the file"], SystemMock, sender)
+        end)
+
+      assert String.contains?(result, "Here is the file content")
+    end
+  end
 end

@@ -11,6 +11,17 @@ defmodule Mbb do
       name: "get_current_time",
       description: "Gets the current date and time",
       input_schema: %{type: "object", properties: %{}}
+    },
+    %{
+      name: "read_file",
+      description: "Reads a file from the filesystem",
+      input_schema: %{
+        type: "object",
+        properties: %{
+          path: %{type: "string", description: "File path to read"}
+        },
+        required: ["path"]
+      }
     }
   ]
 
@@ -61,6 +72,14 @@ defmodule Mbb do
 
   defp execute_tool("get_current_time", _input) do
     NaiveDateTime.local_now() |> NaiveDateTime.to_string()
+  end
+
+  defp execute_tool("read_file", %{"path" => path}) do
+    cond do
+      not File.exists?(path) -> "Error: File not found: #{path}"
+      File.dir?(path) -> "Error: Path is a directory: #{path}"
+      true -> File.read!(path)
+    end
   end
 
   def main(args, system_mod \\ System, sender \\ &send/1)
