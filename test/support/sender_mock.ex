@@ -32,4 +32,18 @@ defmodule SenderMock do
         {:ok, "Here is the file content."}
     end
   end
+
+  def write_file_flow(path, content) do
+    fn
+      msg when is_binary(msg) ->
+        {:tool_use,
+         [
+           %{"type" => "text", "text" => "Let me write that file."},
+           %{"type" => "tool_use", "id" => "tool_789", "name" => "write_file", "input" => %{"path" => path, "content" => content}}
+         ], "tool_789", Mbb.TestHelper.execute_write_file(path, content)}
+
+      messages when is_list(messages) ->
+        {:ok, "File written successfully."}
+    end
+  end
 end

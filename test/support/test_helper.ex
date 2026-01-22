@@ -6,4 +6,11 @@ defmodule Mbb.TestHelper do
       true -> File.read!(path)
     end
   end
+
+  def execute_write_file(path, content) do
+    case File.write(path, content) do
+      :ok -> "Successfully wrote #{byte_size(content)} bytes to #{path}"
+      {:error, reason} -> "Error: Failed to write file: #{reason}"
+    end
+  end
 end

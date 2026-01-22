@@ -22,6 +22,18 @@ defmodule Mbb do
         },
         required: ["path"]
       }
+    },
+    %{
+      name: "write_file",
+      description: "Writes content to a file. Creates the file if it doesn't exist, overwrites if it does.",
+      input_schema: %{
+        type: "object",
+        properties: %{
+          path: %{type: "string", description: "File path to write to"},
+          content: %{type: "string", description: "Content to write to the file"}
+        },
+        required: ["path", "content"]
+      }
     }
   ]
 
@@ -164,6 +176,15 @@ defmodule Mbb do
       not File.exists?(path) -> "Error: File not found: #{path}"
       File.dir?(path) -> "Error: Path is a directory: #{path}"
       true -> File.read!(path)
+    end
+  end
+
+  defp execute_tool("write_file", %{"path" => path, "content" => content}) do
+    IO.puts("\n\n✏️  Writing to #{path}.\n\n")
+
+    case File.write(path, content) do
+      :ok -> "Successfully wrote #{byte_size(content)} bytes to #{path}"
+      {:error, reason} -> "Error: Failed to write file: #{reason}"
     end
   end
 

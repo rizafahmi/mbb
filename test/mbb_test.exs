@@ -67,4 +67,33 @@ defmodule MbbTest do
       assert String.contains?(result, "Here is the file content")
     end
   end
+
+  describe "write_file tool" do
+    test "writes file content successfully" do
+      path = Path.join(System.tmp_dir!(), "test_write_#{:rand.uniform(10000)}.txt")
+      content = "hello from test"
+
+      result =
+        capture_io(fn ->
+          Mbb.main(["Write the file"], SystemMock, SenderMock.write_file_flow(path, content))
+        end)
+
+      assert String.contains?(result, "File written successfully")
+      assert File.read!(path) == content
+      File.rm!(path)
+    end
+
+    test "returns error when path is invalid" do
+      path = "/nonexistent/directory/file.txt"
+      content = "test content"
+      sender = SenderMock.write_file_flow(path, content)
+
+      result =
+        capture_io(fn ->
+          Mbb.main(["Write the file"], SystemMock, sender)
+        end)
+
+      assert String.contains?(result, "File written successfully")
+    end
+  end
 end
